@@ -52,7 +52,8 @@ class PyServiceLinux(PyServicePlatformBase):
         # We store a start script in /etc/init.d, for now we don't support
         # system who don't have it
         if not os.path.exists('/etc/init.d'):
-            raise pyservice.UnsupportedPlatformError('`/etc/init.d` does not exists, this is probably not a Debian based distribution.')
+            raise RuntimeError('`/etc/init.d` does not exists, this '
+                               'platform is unsupported.')
 
         # Make sure the path that PID files are stored in exists
         pid_files_directory = os.path.join(os.path.expanduser('~'), '.pyservice_pids')
@@ -179,7 +180,8 @@ class PyServiceLinux(PyServicePlatformBase):
 
         # Make sure we're running with administrative privileges
         if os.getuid() != 0:
-            raise pyservice.NoElevatedRightsError('We need power (aka root/sudo)')
+            raise RuntimeError('Insufficient privileges to install service, '
+                               'Please run with administrative rights.')
 
         # Simple bash script to write to /etc/init.d
         start_script = """#!/bin/bash
@@ -233,7 +235,8 @@ class PyServiceLinux(PyServicePlatformBase):
 
         # Make sure we're running with administrative privileges
         if os.getuid() != 0:
-            raise pyservice.NoElevatedRightsError('We need power (aka root/sudo)')
+            raise RuntimeError('Insufficient privileges to install service, '
+                               'Please run with administrative rights.')
 
         # Remove the control script from /etc/init.d
         try:
