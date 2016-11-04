@@ -138,25 +138,6 @@ class PyService(PlatformService):
 
         raise NotImplementedError('`uninstalled` not implemented in derived class')
 
-    def is_installed(self):
-        """Determines whether this service is installed on this system.
-
-         Returns:
-            True when this service is installed on this system and false
-            when it was not installed on this system.
-        """
-
-        return self.platform_impl.is_installed()
-
-    def is_running(self):
-        """Determines whether this service is running on this system.
-
-        Returns:
-            True when this service is running on this system and false
-            when it was not running on this system.
-        """
-
-        return self.platform_impl.is_running()
 
     def _start(self):
         """Starts this service.
@@ -174,7 +155,7 @@ class PyService(PlatformService):
 
         # Attempt to start the service
         print('* Starting %s' % self.name)
-        result = self.platform_impl.start()
+        result = self.start()
         if not result:
             return False
 
@@ -198,7 +179,7 @@ class PyService(PlatformService):
 
         # Attempt to stop the service
         print('* Stopping %s' % self.name)
-        result = self.platform_impl.stop()
+        result = self.stop()
         if not result:
             return False
 
@@ -222,7 +203,7 @@ class PyService(PlatformService):
 
         # Attempt to install the service
         print('* Installing %s' % self.name)
-        result = self.platform_impl.install()
+        result = self.install()
         if not result:
             return False
 
@@ -250,10 +231,11 @@ class PyService(PlatformService):
 
         # Attempt to uninstall the service
         print('* Uninstalling %s' % self.name)
-        result = self.platform_impl.uninstall()
+        result = self.uninstall()
         if not result:
             return False
 
         # Call event handler
         self.uninstalled()
         return result
+
