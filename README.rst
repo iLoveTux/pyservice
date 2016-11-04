@@ -56,35 +56,36 @@ Show me the code!
 Here is a simple example of an echo server created using twisted and turned
 into a service:
 
-```python
-import pyservice
-import tornado.ioloop
-import tornado.web
-import sys
+.. code:: python
 
-class TestHandler(tornado.web.RequestHandler):
-    def get(self):
-        self.write('Hello world!')
+    import pyservice
+    import tornado.ioloop
+    import tornado.web
+    import sys
 
-class MyService(pyservice.PyService):
-    def started(self):
-        application = tornado.web.Application([
-            (r'/', TestHandler)
-        ])
+    class TestHandler(tornado.web.RequestHandler):
+        def get(self):
+            self.write('Hello world!')
 
-        application.listen(1337)
-        tornado.ioloop.IOLoop.instance().start()
+    class MyService(pyservice.PyService):
+        def started(self):
+            application = tornado.web.Application([
+                (r'/', TestHandler)
+            ])
 
-    def stopped(self):
-        sys.exit(0)
-        pass
+            application.listen(1337)
+            tornado.ioloop.IOLoop.instance().start()
 
-    def installed(self):
-        pass
+        def stopped(self):
+            sys.exit(0)
+            pass
 
-    def uninstalled(self):
-        pass
+        def installed(self):
+            pass
 
-if __name__ == '__main__':
-    MyService('myservice', 'My nice little test service', True)
-```
+        def uninstalled(self):
+            pass
+
+    if __name__ == '__main__':
+        MyService('myservice', 'My nice little test service', True)
+
