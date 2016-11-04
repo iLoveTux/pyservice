@@ -51,7 +51,7 @@ class PyServiceWindows(PyServicePlatformBase, win32serviceutil.ServiceFramework)
         # Get the service class name (not sure why this is needed but whatever)
         self.compete_name = win32serviceutil.GetServiceClassString(self.service.__class__)
 
-    def start(self):
+    def _start(self):
         """Starts the service (if it's installed and not running).
 
         Returns:
@@ -61,7 +61,7 @@ class PyServiceWindows(PyServicePlatformBase, win32serviceutil.ServiceFramework)
 
         win32serviceutil.StartService(self.name)
 
-    def stop(self):
+    def _stop(self):
         """Stops the service (if it's installed and running).
 
         Returns:
@@ -71,7 +71,7 @@ class PyServiceWindows(PyServicePlatformBase, win32serviceutil.ServiceFramework)
 
         win32serviceutil.StopService(self.name)
 
-    def install(self):
+    def _install(self):
         """Installs the service so it can be started and stopped (if it's not installed yet).
 
         Returns:
@@ -101,7 +101,7 @@ class PyServiceWindows(PyServicePlatformBase, win32serviceutil.ServiceFramework)
             description = self.description
         )
 
-    def uninstall(self):
+    def _uninstall(self):
         """Uninstalls the service so it can no longer be used (if it's installed).
 
         Returns:
@@ -147,3 +147,4 @@ class PyServiceWindows(PyServicePlatformBase, win32serviceutil.ServiceFramework)
 
         # Not one of the start/paused states
         return False
+

@@ -139,7 +139,7 @@ class PyService(PlatformService):
         raise NotImplementedError('`uninstalled` not implemented in derived class')
 
 
-    def _start(self):
+    def start(self):
         """Starts this service.
 
         Handles this by requesting a start from the platform specific implementation.
@@ -155,7 +155,7 @@ class PyService(PlatformService):
 
         # Attempt to start the service
         print('* Starting %s' % self.name)
-        result = self.start()
+        result = self._start()
         if not result:
             return False
 
@@ -163,7 +163,7 @@ class PyService(PlatformService):
         self.started()
         return result
 
-    def _stop(self):
+    def stop(self):
         """Stop this service.
 
         Handles this by requesting a stop from the platform specific implementation.
@@ -179,7 +179,7 @@ class PyService(PlatformService):
 
         # Attempt to stop the service
         print('* Stopping %s' % self.name)
-        result = self.stop()
+        result = self._stop()
         if not result:
             return False
 
@@ -187,7 +187,7 @@ class PyService(PlatformService):
         # process, stopped() will be called when the python script exits
         return result
 
-    def _install(self):
+    def install(self):
         """Installs this service.
 
         Handles this by requesting an installation from the platform specific implementation.
@@ -203,14 +203,14 @@ class PyService(PlatformService):
 
         # Attempt to install the service
         print('* Installing %s' % self.name)
-        result = self.install()
+        result = self._install()
         if not result:
             return False
 
         # Call event handler
         return self.installed()
 
-    def _uninstall(self):
+    def uninstall(self):
         """Uninstalls this service.
 
         Handles this by requesting an un-installation from the platform specific implementation.
@@ -226,12 +226,12 @@ class PyService(PlatformService):
 
         # If the service is running, stop it first
         if self.is_running():
-            if not self._stop():
+            if not self.stop():
                 return False
 
         # Attempt to uninstall the service
         print('* Uninstalling %s' % self.name)
-        result = self.uninstall()
+        result = self._uninstall()
         if not result:
             return False
 

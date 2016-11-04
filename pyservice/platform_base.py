@@ -46,7 +46,7 @@ class PyServicePlatformBase(object):
         self.description = description
         self.auto_start = auto_start
 
-    def start(self):
+    def _start(self):
         """Starts the service (if it's installed and not running).
 
         Returns:
@@ -56,7 +56,7 @@ class PyServicePlatformBase(object):
 
         raise NotImplementedError('`start` not implemented in derived class')
 
-    def stop(self):
+    def _stop(self):
         """Stops the service (if it's installed and running).
 
         Returns:
@@ -66,7 +66,7 @@ class PyServicePlatformBase(object):
 
         raise NotImplementedError('`stop` not implemented in derived class')
 
-    def install(self):
+    def _install(self):
         """Installs the service so it can be started and stopped (if it's not installed yet).
 
         Returns:
@@ -76,7 +76,7 @@ class PyServicePlatformBase(object):
 
         raise NotImplementedError('`install` not implemented in derived class')
 
-    def uninstall(self):
+    def _uninstall(self):
         """Uninstalls the service so it can no longer be used (if it's installed).
 
         Returns:

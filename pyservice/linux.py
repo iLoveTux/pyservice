@@ -64,7 +64,7 @@ class PyServiceLinux(PyServicePlatformBase):
         self.pid_file = os.path.join(pid_files_directory, self.name + '.pid')
         self.control_script = '/etc/init.d/%s' % self.name
 
-    def start(self):
+    def _start(self):
         """Starts the service (if it's installed and not running).
 
         Returns:
@@ -120,7 +120,7 @@ class PyServiceLinux(PyServicePlatformBase):
         os.dup2(standard_error.fileno(), sys.stderr.fileno())
         return True
 
-    def stop(self):
+    def _stop(self):
         """Stops the service (if it's installed and running).
 
         Returns:
@@ -170,7 +170,7 @@ class PyServiceLinux(PyServicePlatformBase):
         print("* Unable to kill the process due to an unknown reason")
         return False
 
-    def install(self):
+    def _install(self):
         """Installs the service so it can be started and stopped (if it's not installed yet).
 
         Returns:
@@ -225,7 +225,7 @@ class PyServiceLinux(PyServicePlatformBase):
         os.chmod(self.control_script, stat.st_mode | 0o0111)
         return True
 
-    def uninstall(self):
+    def _uninstall(self):
         """Uninstalls the service so it can no longer be used (if it's installed).
 
         Returns:
@@ -291,3 +291,4 @@ class PyServiceLinux(PyServicePlatformBase):
 
         # Normal program termination (aka service stopped)
         return
+
