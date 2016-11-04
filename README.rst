@@ -50,6 +50,41 @@ On Windows, it is installed as a normal windows service and can be controlled
 either through the command line or through the Windows Services application
 after it is installed.
 
-**MORE DOCUMENTATION TO COME**
+Show me the code!
+-----------------
 
-  
+Here is a simple example of an echo server created using twisted and turned
+into a service:
+
+```python
+import pyservice
+import tornado.ioloop
+import tornado.web
+import sys
+
+class TestHandler(tornado.web.RequestHandler):
+    def get(self):
+        self.write('Hello world!')
+
+class MyService(pyservice.PyService):
+    def started(self):
+        application = tornado.web.Application([
+            (r'/', TestHandler)
+        ])
+
+        application.listen(1337)
+        tornado.ioloop.IOLoop.instance().start()
+
+    def stopped(self):
+        sys.exit(0)
+        pass
+
+    def installed(self):
+        pass
+
+    def uninstalled(self):
+        pass
+
+if __name__ == '__main__':
+    MyService('myservice', 'My nice little test service', True)
+```
