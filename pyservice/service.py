@@ -47,21 +47,6 @@ class PyService(PlatformService):
     def __init__(self, name, description, auto_start):
         """Initializes a new instance of the PyService class.
 
-        This will parse specified command line options and will handle the
-        following command line parameters:
-
-        * --install
-        * --uninstall
-        * --start
-        * --stop
-        * --run
-
-        Based on the specified command line parameters, the associated action
-        will be taken.
-
-        If none of the command line parameters above is specified, it will default
-        to `--run` which will run the program without being installed as a service.
-
         Args:
             name (str):
                 The name of the service, this name is used when installing or looking
@@ -76,6 +61,21 @@ class PyService(PlatformService):
         super(PyService, self).__init__(name, description, auto_start)
 
     def handle_cli(self, argv=None):
+        """This will parse specified command line options and will handle the
+        following command line parameters:
+
+        * --install
+        * --uninstall
+        * --start
+        * --stop
+        * --run
+
+        Based on the specified command line parameters, the associated action
+        will be taken.
+
+        If none of the command line parameters above is specified, it will default
+        to `--run` which will run the program without being installed as a service.
+        """
         argv = sys.argv[1:] if argv is None else argv
         
         parser = argparse.ArgumentParser(
