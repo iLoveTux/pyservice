@@ -88,3 +88,17 @@ into a service:
     if __name__ == '__main__':
         MyService('myservice', 'My nice little test service', True)
 
+
+**NOTE**
+
+On systemd systems, like Fedora, RHEL and CentOS you will either need to
+reboot or reload systemd. I recommend a reboot as it seems to lead to more
+solid results, but in case you can't you can use the following command:
+
+..code:: bash
+
+    $ sudo systemctl daemon-reload
+
+The reason for this is that we are targeting maximum portability with the
+least amount of code and systemd includes a utility which will translate
+our sys v init script into a systemd unit. 
