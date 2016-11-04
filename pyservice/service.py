@@ -74,31 +74,61 @@ class PyService(PlatformService):
 
         """
         super(PyService, self).__init__(name, description, auto_start)
-        # Maps command line options to functions
-        self.option_map = {
-            '--install': self._install,
-            '--uninstall': self._uninstall,
-            '--start': self._start,
-            '--stop': self._stop,
-            '--run': self.started
-        }
 
-        # Are there any command line parameters?
-        cmd_option = '--run'
-        if len(sys.argv) > 1:
-            cmd_option = sys.argv[1]
+    def handle_cli(self, argv=None):
+        argv = sys.argv[1:] if argv is None else argv
+        
+        parser = argparse.ArgumentParser(
+            description="Service control script for {}.".format(self.name),
+            suffix="Only one option is allowed at any time" 
+        )
+        
+        parser.add_argument(
+            "--install",
+            action="store_true",
+            help="Install {} as a service".format(self.name))
+        parser.add_argument(
+            "--uninstall", 
+            action="store_true",
+            help="uninstall {} as a service".format(self.name))
+        parser.add_argument(
+            "--start", 
+            action="store_true",
+            help="start {} service, if installed".format(self.name))
+        parser.add_argument(
+            "--stop", 
+            action="store_true",
+            help="stop {} service, if installed and running".format(self.name))
+        parser.add_argument(
+            "--run",
+            action="store_true",
+            help="run {} service without installing it first"
+        )
 
-        # Is this a valid command line parameter?
-        if cmd_option not in self.option_map:
-            cmd_option = '--run'
-
-        # Call the associated function, if something went wrong, exit with 1
-        try:
-            if not self.option_map[cmd_option]():
+        args = parser.parse_args(argv)
+        
+        if len(filter(lambda x: x, vars(args).values())) > 1:
+            # More than one option specified
+            raise RuntimeError("Only one option can be specified at a time.")
+        
+        if not any(vars(args).values()):
+            # Nothing was provided, run without installing
+            args.run = True
+        
+        def run_or_exit_with_1(func):
+            if not func():
                 sys.exit(1)
-        except Exception as error:
-            print(str(error))
-            sys.exit(1)
+    
+        if args.run:
+            run_or_exit_with_1(self.started)
+        elif args.install:
+            run_or_exit_with_1(self.install)
+        elif args.uninstall:
+            run_or_exit_with_1(self.uninstall)
+        elif args.start:
+            run_or_exit_with_1(self.start)
+        elif args.stop:
+            run_or_exit_with_1(self.stop)
 
     def started(self):
         """Virtual, to be overridden by the derived class.
