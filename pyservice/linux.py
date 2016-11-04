@@ -26,6 +26,7 @@ import sys
 import atexit
 import signal
 import time
+import textwrap
 from .platform_base import PyServicePlatformBase
 
 class PyServiceLinux(PyServicePlatformBase):
@@ -184,8 +185,8 @@ class PyServiceLinux(PyServicePlatformBase):
                                'Please run with administrative rights.')
 
         # Simple bash script to write to /etc/init.d
-        start_script = """#!/bin/bash
-
+        start_script = "#!/bin/bash"
+        start_script += textwrap.dedent("""
                         PYTHON_PATH="%PYTHON_PATH%"
                         SERVICE_PATH="%SERVICE_PATH%"
 
@@ -205,7 +206,7 @@ class PyServiceLinux(PyServicePlatformBase):
 
                             *)
                                 echo 'Unknown action, try; start/stop/restart\\n'
-                        esac"""
+                        esac""")
 
         # Determine the path of the current script and the path to the python interpreter
         service_path = os.path.join(os.getcwd(), sys.argv[0])
