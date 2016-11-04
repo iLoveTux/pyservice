@@ -47,7 +47,7 @@ class PyServiceLinux(PyServicePlatformBase):
                 starts or when the service crashes.
         """
 
-        super().__init__(*args, **kwargs)
+        super(PyServiceLinux, self).__init__(*args, **kwargs)
 
         # We store a start script in /etc/init.d, for now we don't support
         # system who don't have it

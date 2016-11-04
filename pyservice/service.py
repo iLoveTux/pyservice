@@ -21,6 +21,7 @@
 
 import sys
 import platform
+import argparse
 import pyservice
 
 system = platform.system()
@@ -58,7 +59,7 @@ class PyService(PlatformService):
                 starts or when the service crashes.
 
         """
-        super(PyService, self).__init__(name, description, auto_start)
+        super(PyService, self).__init__(self, name, description, auto_start)
 
     def handle_cli(self, argv=None):
         """This will parse specified command line options and will handle the
@@ -80,7 +81,7 @@ class PyService(PlatformService):
         
         parser = argparse.ArgumentParser(
             description="Service control script for {}.".format(self.name),
-            suffix="Only one option is allowed at any time" 
+            epilog="Only one option is allowed at any time" 
         )
         
         parser.add_argument(
