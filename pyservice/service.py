@@ -23,8 +23,14 @@ import sys
 import platform
 import pyservice
 
-from .linux import PyServiceLinux
-from .windows import PyServiceWindows
+system = platform.system()
+
+if "Linux" in system:
+    from .linux import PyServiceLinux as PlatformService
+elif "Windows" in system:
+    from .windows import PyServiceWindows as PlatformService
+else:
+    raise RuntimeError("Unsupported platform: {}".format(system))
 
 class PyService(object):
     """Interface for classes who wish to represent a service.
@@ -77,28 +83,16 @@ class PyService(object):
             '--run': self.started
         }
 
-        # Maps systems/platforms to the right classes
-        self.platform_map = {
-            'Linux': PyServiceLinux,
-            'Windows': PyServiceWindows
-        }
-
         # Store constructor parameters
         self.name = name
         self.description = description
         self.auto_start = auto_start
 
-        # Determine whether this platform is supported
-        if platform.system() not in self.platform_map:
-            print('* Unsupported platform: `%s`' % platform.system())
-            return
-
         # Create a new instance of the platform specific class
-        try:
-            self.platform_impl = self.platform_map[platform.system()](self, self.name, self.description, self.auto_start)
-        except Exception as error:
-            print('* Error: %s' % str(error))
-            return
+        self.platform_impl = PlatformService(self, 
+                                             self.name, 
+                                             self.description, 
+                                             self.auto_start)
 
         # Are there any command line parameters?
         cmd_option = '--run'
