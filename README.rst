@@ -78,7 +78,6 @@ into a service:
 
         def stopped(self):
             sys.exit(0)
-            pass
 
         def installed(self):
             pass
