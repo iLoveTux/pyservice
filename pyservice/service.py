@@ -32,7 +32,7 @@ elif "Windows" in system:
 else:
     raise RuntimeError("Unsupported platform: {}".format(system))
 
-class PyService(object):
+class PyService(PlatformService):
     """Interface for classes who wish to represent a service.
 
     By overriding virtual methods, the deriving class that perform
@@ -73,7 +73,7 @@ class PyService(object):
                 starts or when the service crashes.
 
         """
-
+        super(PyService, self).__init__(name, description, auto_start)
         # Maps command line options to functions
         self.option_map = {
             '--install': self._install,
@@ -82,17 +82,6 @@ class PyService(object):
             '--stop': self._stop,
             '--run': self.started
         }
-
-        # Store constructor parameters
-        self.name = name
-        self.description = description
-        self.auto_start = auto_start
-
-        # Create a new instance of the platform specific class
-        self.platform_impl = PlatformService(self, 
-                                             self.name, 
-                                             self.description, 
-                                             self.auto_start)
 
         # Are there any command line parameters?
         cmd_option = '--run'
