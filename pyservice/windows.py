@@ -49,7 +49,7 @@ class PyServiceWindows(PyServicePlatformBase, win32serviceutil.ServiceFramework)
         PyServicePlatformBase.__init__(self, *args)
 
         # Get the service class name (not sure why this is needed but whatever)
-        self.compete_name = win32serviceutil.GetServiceClassString(self.service.__class__)
+        self.class_name = win32serviceutil.GetServiceClassString(self.service.__class__)
 
     def _start(self):
         """Starts the service (if it's installed and not running).
