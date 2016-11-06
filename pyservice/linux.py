@@ -19,277 +19,461 @@
 #
 #####################################################################################
 
-import pyservice
 import os
 import stat
 import sys
 import atexit
 import signal
+import argparse
 import time
 import textwrap
-from .platform_base import PyServicePlatformBase
+from functools import wraps
 
-class PyServiceLinux(PyServicePlatformBase):
-    """Implements service functionality (using daemons) on Linux.
+def handle_cli(_service, argv=None):
+    """This will parse specified command line options and will handle the
+    following command line parameters:
 
+    * install
+    * remove
+    * start
+    * stop
+    * run
+
+    Based on the specified command line parameters, the associated action
+    will be taken.
+
+    If none of the command line parameters above is specified, it will default
+    to `--run` which will run the program without being installed as a service.
     """
+    argv = sys.argv[1:] if argv is None else argv
+    
+    parser = argparse.ArgumentParser(
+        description="Service control script for {}.".format(_service.name),
+        epilog="Only one option is allowed at any time" 
+    )
+    
+    parser.add_argument(
+        "--install",
+        action="store_true",
+        help="Install {} as a service".format(_service.name))
+    parser.add_argument(
+        "--remove", 
+        action="store_true",
+        help="uninstall {} as a service".format(_service.name))
+    parser.add_argument(
+        "--start", 
+        action="store_true",
+        help="start {} service, if installed".format(_service.name))
+    parser.add_argument(
+        "--stop", 
+        action="store_true",
+        help="stop {} service, if installed and running".format(_service.name))
+    parser.add_argument(
+        "--run",
+        action="store_true",
+        help="run {} service without installing it first".format(_service.name)
+    )
 
-    def __init__(self, *args, **kwargs):
-        """Initializes a new instance of the PyServiceLinux class.
+    args = parser.parse_args(argv)
+    
+    if len(filter(lambda x: x, vars(args).values())) > 1:
+        # More than one option specified
+        raise RuntimeError("Only one option can be specified at a time.")
+    
+    if not any(vars(args).values()):
+        # Nothing was provided, run without installing
+        args.run = True
+    
+    def run_or_exit_with_1(func):
+        if not func():
+            sys.exit(1)
 
-        Args:
-            name (str):
-                The name of the service, this name is used when installing or looking
-                for the service.
-            description (str):
-                Small sentence, describing this service.
-            auto_start (bool):
-                True when this service needs to be started automatically when the system
-                starts or when the service crashes.
+    if args.run:
+        run_or_exit_with_1(_service.started)
+    elif args.install:
+        run_or_exit_with_1(_service.install)
+    elif args.remove:
+        run_or_exit_with_1(_service.uninstall)
+    elif args.start:
+        run_or_exit_with_1(_service.start)
+    elif args.stop:
+        run_or_exit_with_1(_service.stop)
+
+
+# , service, name, description, auto_start
+def service(func):
+    
+    class LinuxService(object):
+        """Implements service functionality (using daemons) on Linux.
+
         """
+        def __init__(self):
+            """Initializes a new instance of the PyServicePlatformBase class.
 
-        super(PyServiceLinux, self).__init__(*args, **kwargs)
+            Args:
+                name (str):
+                    The name of the service, this name is used when installing or looking
+                    for the service.
+                description (str):
+                    Small sentence, describing this service.
+                auto_start (bool):
+                    True when this service needs to be started automatically when the system
+                    starts or when the service crashes.
+            """
 
-        # We store a start script in /etc/init.d, for now we don't support
-        # system who don't have it
-        if not os.path.exists('/etc/init.d'):
-            raise RuntimeError('`/etc/init.d` does not exists, this '
-                               'platform is unsupported.')
+            self.name = func.__name__
+            self.description = getattr(
+                    func,
+                    "__doc__", 
+                    "A cross-platform service powered by PyService")
+            self.stop_requested = False
+#            self.auto_start = auto_start
 
-        # Make sure the path that PID files are stored in exists
-        pid_files_directory = os.path.join(os.path.expanduser('~'), '.pyservice_pids')
-        if not os.path.exists(pid_files_directory):
-            os.mkdir(pid_files_directory)
+            # We store a start script in /etc/init.d, for now we don't support
+            # system who don't have it
+            if not os.path.exists('/etc/init.d'):
+                raise RuntimeError('`/etc/init.d` does not exists, this '
+                                   'platform is unsupported.')
 
-        # Build up some paths
-        self.pid_file = os.path.join(pid_files_directory, self.name + '.pid')
-        self.control_script = '/etc/init.d/%s' % self.name
+            # Make sure the path that PID files are stored in exists
+            pid_files_directory = os.path.join(os.path.expanduser('~'), '.pyservice_pids')
+            if not os.path.exists(pid_files_directory):
+                os.mkdir(pid_files_directory)
 
-    def _start(self):
-        """Starts the service (if it's installed and not running).
+            # Build up some paths
+            self.pid_file = os.path.join(pid_files_directory, self.name + '.pid')
+            self.control_script = '/etc/init.d/%s' % self.name
 
-        Returns:
-            True when starting the service was a success and false when
-            it failed.
-        """
+        def started(self):
+            func(self)
 
-        # Attempt to fork parent process (double fork)
-        try:
-            pid = os.fork()
-            if pid > 0:
-                    sys.exit(0)
-        except OSError as error:
-            print('* Unable to fork parent process (1): %s' % format(error))
-            return False
+        def start(self):
+            """Starts this service.
 
-        # Decouple from parent environment
-        os.setsid()
-        os.umask(0)
-
-        # Do the second fork
-        try:
-            pid = os.fork()
-            if pid > 0:
-                    sys.exit(0)
-        except OSError as error:
-            print('* Unable to fork parent process (2): %s' % format(error))
-            return False
-
-        # Register cleanup function
-        atexit.register(self._clean)
-        atexit.register(self.service.stopped)
-
-        # Write the PID file
-        pid = str(os.getpid())
-        try:
-            file = open(self.pid_file, 'w')
-            file.write(str(pid) + '\n')
-            file.close()
-        except Exception as error:
-            print('* Unable to write PID file to `%s`: %s' % self.pid_file, format(error))
-            return False
-
-        # Redirect standard file descriptors to /dev/null
-        sys.stdout.flush()
-        sys.stdin.flush()
-        standard_in = open(os.devnull, 'r')
-        standard_out = open(os.devnull, 'a+')
-        standard_error = open(os.devnull, 'a+')
-
-        os.dup2(standard_in.fileno(), sys.stdin.fileno())
-        os.dup2(standard_out.fileno(), sys.stdout.fileno())
-        os.dup2(standard_error.fileno(), sys.stderr.fileno())
-        return True
-
-    def _stop(self):
-        """Stops the service (if it's installed and running).
-
-        Returns:
-            True when stopping the service was a success and false
-            when it failed.
-        """
-
-        # Attempt to read the PID from the pid file
-        file = open(self.pid_file, 'r')
-
-        try:
-            pid = int(file.read().strip())
-        except:
-            print("* Unable to read PID file")
-            return False
-
-        file.close()
-
-        # Remove the PID file already to indicate that this is a stop
-        # and not abnormal program termination, when the PID file is still
-        # the service will handle this as abnormal program termination
-        # and will restart the service if auto-start is enabled
-        os.remove(self.pid_file)
-
-        # Attempt to kill the process, continue to attempt to kill it until
-        # the process has died with a maximum of 5 attempts
-        attempts = 0
-        try:
-
-            while attempts < 5:
-                os.kill(pid, signal.SIGTERM)
-                time.sleep(0.2)
-                attempts += 1
-
-        except OSError as error:
-            error_message = str(error.args)
-
-            # Check the error message, if it contains the text below,
-            # the process is no longer running and we have thus killed the process
-            if error_message.find("No such process") > 0:
-                return True
-            else:
-                print("* Unable to kill the process %s" % error_message)
+            Returns:
+                True when starting the service was a success and false when it failed.
+            """
+            if not self.is_installed():
+                print('* Not Installed')
                 return False
 
-        # We were unable to kill the process due to an unknown reason
-        print("* Unable to kill the process due to an unknown reason")
-        return False
+            # Make sure the service is not already running
+            if self.is_running():
+                print('* Already running')
+                return False
 
-    def _install(self):
-        """Installs the service so it can be started and stopped (if it's not installed yet).
+            # Attempt to start the service
+            print('* Starting %s' % self.name)
+            result = self._start()
+            if not result:
+                return False
 
-        Returns:
-            True when installing the service was a success and false
-            when it failed.
-        """
+            # Call event handler
+            self.started()
+            return result
 
-        # Make sure we're running with administrative privileges
-        if os.getuid() != 0:
-            raise RuntimeError('Insufficient privileges to install service, '
-                               'Please run with administrative rights.')
+        def stop(self):
+            """Stop this service.
 
-        # Simple bash script to write to /etc/init.d
-        start_script = "#!/bin/bash"
-        start_script += textwrap.dedent("""
-                        PYTHON_PATH="%PYTHON_PATH%"
-                        SERVICE_PATH="%SERVICE_PATH%"
+            Returns:
+                True when stopping the service was a success and false when it failed.
+            """
 
-                        case $1 in
-                            start)
-                                $PYTHON_PATH $SERVICE_PATH --start
-                                ;;
+            # Make sure that the service is running
+            if not self.is_running():
+                print('* Not running')
+                return False
 
-                            stop)
-                                $PYTHON_PATH $SERVICE_PATH --stop
-                                ;;
+            # Attempt to stop the service
+            print('* Stopping %s' % self.name)
+            result = self._stop()
+            if not result:
+                return False
 
-                            restart)
-                                $PYTHON_PATH $SERVICE_PATH --stop
-                                $PYTHON_PATH $SERVICE_PATH --start
-                                ;;
+            # We do not call the event handler (self.stop()) here because we are killing a forked
+            # process, stopped() will be called when the python script exits
+            return result
 
-                            *)
-                                echo 'Unknown action, try; start/stop/restart\\n'
-                        esac""")
+        def install(self):
+            """Installs this service.
 
-        # Determine the path of the current script and the path to the python interpreter
-        service_path = os.path.join(os.getcwd(), sys.argv[0])
-        python_path = sys.executable
+            Returns:
+                True when installing the service was a success and false when it failed.
+            """
 
-        # Replace the python path and the path to our service in the start script
-        start_script = start_script.replace('%PYTHON_PATH%', python_path)
-        start_script = start_script.replace('%SERVICE_PATH%', service_path)
+            # Make sure the service is not already installed
+            if self.is_installed():
+                print('* Already installed')
+                return False
 
-        # Write the control script to file (/etc/init.d)
-        file = open(self.control_script, 'w')
-        file.write(start_script)
-        file.close()
+            # Attempt to install the service
+            print('* Installing %s' % self.name)
+            result = self._install()
+            if not result:
+                return False
 
-        # Make the file executable (chmod +x)
-        stat = os.stat(self.control_script)
-        os.chmod(self.control_script, stat.st_mode | 0o0111)
-        return True
+            # Call event handler
+            return self.installed()
 
-    def _uninstall(self):
-        """Uninstalls the service so it can no longer be used (if it's installed).
+        def uninstall(self):
+            """Uninstalls this service.
 
-        Returns:
-            True when installing the service was a success and false
-            when it failed.
-        """
+            Returns:
+                True when un-installing the service was a success and false when it failed.
+            """
 
-        # Make sure we're running with administrative privileges
-        if os.getuid() != 0:
-            raise RuntimeError('Insufficient privileges to install service, '
-                               'Please run with administrative rights.')
+            # Make sure the service is installed
+            if not self.is_installed():
+                print('* Not installed')
+                return False
 
-        # Remove the control script from /etc/init.d
-        try:
-            os.remove(self.control_script)
-        except Exception as error:
-            print("* Unable to uninstall, failed to remove control script: %s" % str(error))
+            # If the service is running, stop it first
+            if self.is_running():
+                if not self.stop():
+                    return False
+
+            # Attempt to uninstall the service
+            print('* Uninstalling %s' % self.name)
+            result = self._uninstall()
+            if not result:
+                return False
+
+            # Call event handler
+            self.uninstalled()
+            return result
+
+        def _start(self):
+            """Starts the service (if it's installed and not running).
+
+            Returns:
+                True when starting the service was a success and false when
+                it failed.
+            """
+
+            # Attempt to fork parent process (double fork)
+            try:
+                pid = os.fork()
+                if pid > 0:
+                        sys.exit(0)
+            except OSError as error:
+                print('* Unable to fork parent process (1): %s' % format(error))
+                return False
+
+            # Decouple from parent environment
+            os.setsid()
+            os.umask(0)
+
+            # Do the second fork
+            try:
+                pid = os.fork()
+                if pid > 0:
+                        sys.exit(0)
+            except OSError as error:
+                print('* Unable to fork parent process (2): %s' % format(error))
+                return False
+
+            # Register cleanup function
+            atexit.register(self._clean)
+#            atexit.register(self.service.stopped)
+
+            # Write the PID file
+            pid = str(os.getpid())
+            try:
+                file = open(self.pid_file, 'w')
+                file.write(str(pid) + '\n')
+                file.close()
+            except Exception as error:
+                print('* Unable to write PID file to `%s`: %s' % self.pid_file, format(error))
+                return False
+
+            # Redirect standard file descriptors to /dev/null
+            sys.stdout.flush()
+            sys.stdin.flush()
+            standard_in = open(os.devnull, 'r')
+            standard_out = open(os.devnull, 'a+')
+            standard_error = open(os.devnull, 'a+')
+
+            os.dup2(standard_in.fileno(), sys.stdin.fileno())
+            os.dup2(standard_out.fileno(), sys.stdout.fileno())
+            os.dup2(standard_error.fileno(), sys.stderr.fileno())
+            return True
+
+        def _stop(self):
+            """Stops the service (if it's installed and running).
+
+            Returns:
+                True when stopping the service was a success and false
+                when it failed.
+            """
+            self.stop_requested = True
+
+            # Attempt to read the PID from the pid file
+            file = open(self.pid_file, 'r')
+
+            try:
+                pid = int(file.read().strip())
+            except:
+                print("* Unable to read PID file")
+                return False
+
+            file.close()
+
+            # Remove the PID file already to indicate that this is a stop
+            # and not abnormal program termination, when the PID file is still
+            # the service will handle this as abnormal program termination
+            # and will restart the service if auto-start is enabled
+            os.remove(self.pid_file)
+
+            # Attempt to kill the process, continue to attempt to kill it until
+            # the process has died with a maximum of 5 attempts
+            attempts = 0
+            try:
+
+                while attempts < 5:
+                    os.kill(pid, signal.SIGTERM)
+                    time.sleep(0.2)
+                    attempts += 1
+
+            except OSError as error:
+                error_message = str(error.args)
+
+                # Check the error message, if it contains the text below,
+                # the process is no longer running and we have thus killed the process
+                if error_message.find("No such process") > 0:
+                    return True
+                else:
+                    print("* Unable to kill the process %s" % error_message)
+                    return False
+
+            # We were unable to kill the process due to an unknown reason
+            print("* Unable to kill the process due to an unknown reason")
             return False
 
-        return True
+        def _install(self):
+            """Installs the service so it can be started and stopped (if it's not installed yet).
 
-    def is_installed(self):
-        """Determines whether this service is installed on this system.
+            Returns:
+                True when installing the service was a success and false
+                when it failed.
+            """
 
-        Returns:
-            True when this service is installed on this system and false
-            when it was not installed on this system.
-        """
+            # Make sure we're running with administrative privileges
+            if os.getuid() != 0:
+                raise RuntimeError('Insufficient privileges to install service, '
+                                   'Please run with administrative rights.')
 
-        return os.path.exists(self.control_script)
+            # Simple bash script to write to /etc/init.d
+            start_script = "#!/bin/bash"
+            start_script += textwrap.dedent("""
+                            PYTHON_PATH="%PYTHON_PATH%"
+                            SERVICE_PATH="%SERVICE_PATH%"
 
-    def is_running(self):
-        """Determines whether this service is running on this system.
+                            case $1 in
+                                start)
+                                    $PYTHON_PATH $SERVICE_PATH --start
+                                    ;;
 
-        Returns:
-            True when this service is running on this system and false
-            when it was not running on this system.
-        """
+                                stop)
+                                    $PYTHON_PATH $SERVICE_PATH --stop
+                                    ;;
 
-        return os.path.exists(self.pid_file)
+                                restart)
+                                    $PYTHON_PATH $SERVICE_PATH --stop
+                                    $PYTHON_PATH $SERVICE_PATH --start
+                                    ;;
 
-    def _clean(self):
-        """This is the cleanup function we register for the forked process.
+                                *)
+                                    echo 'Unknown action, try; start/stop/restart\\n'
+                            esac""")
 
-        This function is called when the process ends. This way we can clean
-        up stuff etc.
-
-        By checking whether the PID file still exists, we can detect whether
-        this is a normal stop, or whether we're dealing with abnormal program
-        termination.
-
-        Note: This does not prevent SIGKILL, if SIGKILL is signalled, we're dead
-        for real. The only way we can back up then is the cron job
-        """
-
-        # If the PID file still exists, we're dealing with abnormal program
-        # termination and we'll restart ourselves if auto-start is enabled
-        if os.path.exists(self.pid_file) and self.auto_start:
+            # Determine the path of the current script and the path to the python interpreter
             service_path = os.path.join(os.getcwd(), sys.argv[0])
-            os.remove(self.pid_file)
-            time.sleep(1)
-            os.system(sys.executable + ' ' + service_path + ' --start')
+            python_path = sys.executable
 
-        # Normal program termination (aka service stopped)
-        return
+            # Replace the python path and the path to our service in the start script
+            start_script = start_script.replace('%PYTHON_PATH%', python_path)
+            start_script = start_script.replace('%SERVICE_PATH%', service_path)
 
+            # Write the control script to file (/etc/init.d)
+            file = open(self.control_script, 'w')
+            file.write(start_script)
+            file.close()
+
+            # Make the file executable (chmod +x)
+            stat = os.stat(self.control_script)
+            os.chmod(self.control_script, stat.st_mode | 0o0111)
+            return True
+
+        def _uninstall(self):
+            """Uninstalls the service so it can no longer be used (if it's installed).
+
+            Returns:
+                True when installing the service was a success and false
+                when it failed.
+            """
+
+            # Make sure we're running with administrative privileges
+            if os.getuid() != 0:
+                raise RuntimeError('Insufficient privileges to install service, '
+                                   'Please run with administrative rights.')
+
+            # Remove the control script from /etc/init.d
+            try:
+                os.remove(self.control_script)
+            except Exception as error:
+                print("* Unable to uninstall, failed to remove control script: %s" % str(error))
+                return False
+
+            return True
+
+        def is_installed(self):
+            """Determines whether this service is installed on this system.
+
+            Returns:
+                True when this service is installed on this system and false
+                when it was not installed on this system.
+            """
+
+            return os.path.exists(self.control_script)
+
+        def is_running(self):
+            """Determines whether this service is running on this system.
+
+            Returns:
+                True when this service is running on this system and false
+                when it was not running on this system.
+            """
+
+            return os.path.exists(self.pid_file)
+
+        def _clean(self):
+            """This is the cleanup function we register for the forked process.
+
+            This function is called when the process ends. This way we can clean
+            up stuff etc.
+
+            By checking whether the PID file still exists, we can detect whether
+            this is a normal stop, or whether we're dealing with abnormal program
+            termination.
+
+            Note: This does not prevent SIGKILL, if SIGKILL is signalled, we're dead
+            for real. The only way we can back up then is the cron job
+            """
+
+            # If the PID file still exists, we're dealing with abnormal program
+            # termination and we'll restart ourselves if auto-start is enabled
+            if os.path.exists(self.pid_file) and self.auto_start:
+                service_path = os.path.join(os.getcwd(), sys.argv[0])
+                os.remove(self.pid_file)
+                time.sleep(1)
+                os.system(sys.executable + ' ' + service_path + ' --start')
+
+            # Normal program termination (aka service stopped)
+            return
+
+        def installed(self):
+            pass
+        
+        def uninstalled(self):
+            pass 
+    return LinuxService()

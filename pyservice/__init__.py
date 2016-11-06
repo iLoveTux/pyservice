@@ -19,5 +19,15 @@
 #
 #####################################################################################
 
-from .service import PyService
+import platform
+
+system = platform.system()
+
+if "Linux" in system:
+    from .linux import service, handle_cli
+elif "Windows" in system:
+    from .windows import service, handle_cli
+else:
+    raise RuntimeError("Unsupported platform: {}".format(system))
+
 
