@@ -9,7 +9,7 @@ if sys.version_info < (3,0):
 
 install_requires = []
 if "Windows" in platform.system():
-    install_requires.append("pypiwin32==219")
+    install_requires.append("pywin32==220")
 
 setup(
     name="pyservice",

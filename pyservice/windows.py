@@ -3,11 +3,12 @@ import servicemanager
 import win32service
 import win32event
 import threading
+from time import sleep
 from functools import partial, wraps
 
 handle_cli = win32serviceutil.HandleCommandLine
 
-def decorator(func):
+def service(func):
     
     @wraps(func)
     class WindowsService(win32serviceutil.ServiceFramework):
@@ -35,7 +36,7 @@ def decorator(func):
             """
             self.ReportServiceStatus(win32service.SERVICE_START_PENDING)
             self.ReportServiceStatus(win32service.SERVICE_RUNNING)
-            child = threading.Thread(target=self.main, args=(self, )
+            child = threading.Thread(target=self.main, args=(self, ))
             child.daemon = True
             child.start()
             while not self.stop_requested:
