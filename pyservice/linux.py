@@ -18,7 +18,20 @@
 #   Copyright: Swen Kooij (Photonios) <photonios@outlook.com>
 #
 #####################################################################################
+"""This module implements the service decorator for Linux based systems.
 
+The symbols "handle_cli" and "service" are imported from this module if
+this code is run on a Linux system, and the same tokens are imported from
+"pyservice/windows.py" if this code is executed on a Windows based system.
+
+In either case, "service" is a decorator which will turn a callable object
+into a service on the current system, in this way you can simply write one
+function which can be installed, started, stopped and removed for both
+Linux and Windows.
+
+Your code will automatically be cross platform and the differences will
+be handled by this library.
+"""
 import os
 import stat
 import sys
@@ -31,20 +44,20 @@ import textwrap
 from functools import wraps
 
 def handle_cli(_service, argv=None):
-    """This will parse specified command line options and will handle the
-    following command line parameters:
+    """This will parse the options specified on the command line
+    and call the associated function:
 
-    * install
-    * remove
-    * start
-    * stop
-    * run
+    Valid subcommands: install, remove, start, stop, run
 
-    Based on the specified command line parameters, the associated action
-    will be taken.
-
-    If none of the command line parameters above is specified, it will default
-    to `run` which will run the program without being installed as a service.
+    If none of the command line parameters above is specified, it
+    will default to `run` which will run the program in the foreground
+    without being installed as a service.
+    
+    :param _service: The service class for which to create the CLI
+    :param argv: A list of arguments in the form of sys.argv (defaults to sys.argv)
+    :type argv: list
+    :type _service: pyservice.LinuxService
+    :rtype: None
     """
     argv = sys.argv[1:] if argv is None else argv
     
@@ -89,23 +102,19 @@ def handle_cli(_service, argv=None):
 
 # , service, name, description, auto_start
 def service(func):
+    """Decorator to turn a function into a Linux service.
+    
+    Handles runas, daemonization and installation as a service
+    
+    :param func: The function to turn into a service
+    :type func: callable 
+    """
     
     class LinuxService(object):
         """Implements service functionality (using daemons) on Linux.
-
         """
         def __init__(self):
-            """Initializes a new instance of the PyServicePlatformBase class.
-
-            Args:
-                name (str):
-                    The name of the service, this name is used when installing or looking
-                    for the service.
-                description (str):
-                    Small sentence, describing this service.
-                auto_start (bool):
-                    True when this service needs to be started automatically when the system
-                    starts or when the service crashes.
+            """Initializes a new instance pyservice.LinuxService.
             """
 
             self.name = func.__name__
@@ -114,7 +123,6 @@ def service(func):
                     "__doc__", 
                     "A cross-platform service powered by PyService")
             self.stop_requested = False
-#            self.auto_start = auto_start
 
             # We store a start script in /etc/init.d, for now we don't support
             # system who don't have it
@@ -122,16 +130,20 @@ def service(func):
                 raise RuntimeError('`/etc/init.d` does not exists, this '
                                    'platform is unsupported.')
 
-            # Make sure the path that PID files are stored in exists
             pid_files_directory = os.path.join("/var", "run")
-#            if not os.path.exists(pid_files_directory):
-#                os.mkdir(pid_files_directory)
 
             # Build up some paths
             self.pid_file = os.path.join(pid_files_directory, self.name + '.pid')
             self.control_script = '/etc/init.d/%s' % self.name
 
         def started(self, user):
+            """Runs the actual business logic of the service
+            
+            :param user: The user to run as
+            :type user: str
+            :returns: None
+            :rtype: None
+            """
             uid = pwd.getpwnam(user)
             try:
                 os.setuid(uid.pw_uid)
@@ -142,8 +154,10 @@ def service(func):
         def start(self, user):
             """Starts this service.
 
-            Returns:
-                True when starting the service was a success and false when it failed.
+            :param user: the user to run as
+            :type user: str
+            :returns: True when successful and False otherwise.
+            :rtype: Boolean
             """
             if not self.is_installed():
                 print('* Not Installed')
@@ -167,8 +181,8 @@ def service(func):
         def stop(self):
             """Stop this service.
 
-            Returns:
-                True when stopping the service was a success and false when it failed.
+            :returns: True when successful and False otherwise.
+            :rtype: Boolean
             """
             # Make sure that the service is running
             if not self.is_running():
@@ -188,8 +202,8 @@ def service(func):
         def install(self, user):
             """Installs this service.
 
-            Returns:
-                True when installing the service was a success and false when it failed.
+            :returns: True when successful and False otherwise.
+            :rtype: Boolean
             """
 
             # Make sure the service is not already installed
@@ -209,8 +223,8 @@ def service(func):
         def uninstall(self):
             """Uninstalls this service.
 
-            Returns:
-                True when un-installing the service was a success and false when it failed.
+            :returns: True when successful and False otherwise.
+            :rtype: Boolean
             """
 
             # Make sure the service is installed
@@ -236,9 +250,8 @@ def service(func):
         def _start(self):
             """Starts the service (if it's installed and not running).
 
-            Returns:
-                True when starting the service was a success and false when
-                it failed.
+            :returns: True when successful and false otherwise.
+            :rtype: Boolean
             """
 
             # Attempt to fork parent process (double fork)
@@ -275,7 +288,7 @@ def service(func):
 
             # Register cleanup function
             atexit.register(self._clean)
-#            atexit.register(self.service.stopped)
+            atexit.register(self.service.stopped)
 
             # Redirect standard file descriptors to /dev/null
             sys.stdout.flush()
@@ -292,9 +305,8 @@ def service(func):
         def _stop(self):
             """Stops the service (if it's installed and running).
 
-            Returns:
-                True when stopping the service was a success and false
-                when it failed.
+            :returns: True when successful and False otherwise.
+            :rtype: Boolean
             """
             self.stop_requested = True
 
@@ -343,9 +355,10 @@ def service(func):
         def _install(self, user):
             """Installs the service so it can be started and stopped (if it's not installed yet).
 
-            Returns:
-                True when installing the service was a success and false
-                when it failed.
+            :param user: The user the service should run as
+            :type user: str
+            :returns: True when successful and False otherwise.
+            :rtype: Boolean
             """
 
             # Make sure we're running with administrative privileges
@@ -398,9 +411,8 @@ def service(func):
         def _uninstall(self):
             """Uninstalls the service so it can no longer be used (if it's installed).
 
-            Returns:
-                True when installing the service was a success and false
-                when it failed.
+            :returns: True when successful and False otherwise.
+            :rtype: Boolean
             """
 
             # Make sure we're running with administrative privileges
@@ -420,9 +432,8 @@ def service(func):
         def is_installed(self):
             """Determines whether this service is installed on this system.
 
-            Returns:
-                True when this service is installed on this system and false
-                when it was not installed on this system.
+            :returns: True when this service is installed and False otherwise.
+            :rtype: Boolean
             """
 
             return os.path.exists(self.control_script)
@@ -430,9 +441,8 @@ def service(func):
         def is_running(self):
             """Determines whether this service is running on this system.
 
-            Returns:
-                True when this service is running on this system and false
-                when it was not running on this system.
+            :returns: True when this service is running False otherwise.
+            :rtype: Boolean
             """
 
             return os.path.exists(self.pid_file)
@@ -453,7 +463,7 @@ def service(func):
 
             # If the PID file still exists, we're dealing with abnormal program
             # termination and we'll restart ourselves if auto-start is enabled
-            if os.path.exists(self.pid_file) and self.auto_start:
+            if os.path.exists(self.pid_file):
                 service_path = os.path.join(os.getcwd(), sys.argv[0])
                 os.remove(self.pid_file)
                 time.sleep(1)
@@ -463,9 +473,21 @@ def service(func):
             return
 
         def installed(self):
+            """If overridden, this function will be called after service
+            is installed
+            """
             pass
         
         def uninstalled(self):
+            """If overridden, this function will be called after service
+            is uninstalled
+            """
+            pass 
+
+        def stopped(self):
+            """If overridden, this function will be called after service
+            is stopped
+            """
             pass 
 
     return LinuxService()

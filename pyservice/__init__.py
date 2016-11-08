@@ -18,7 +18,10 @@
 #   Copyright: Swen Kooij (Photonios) <photonios@outlook.com>
 #
 #####################################################################################
-
+"""This is the __init__.py file for pyservice. This will import "service"
+and "handle_cli" for the current platform, otherwise a RuntimeError will
+be raised if the current platform is unsupported.
+"""
 import platform
 
 system = platform.system()
@@ -29,5 +32,4 @@ elif "Windows" in system:
     from .windows import service, handle_cli
 else:
     raise RuntimeError("Unsupported platform: {}".format(system))
-
 
