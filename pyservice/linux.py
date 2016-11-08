@@ -22,6 +22,7 @@
 import os
 import stat
 import sys
+import pwd
 import atexit
 import signal
 import argparse
@@ -55,6 +56,7 @@ def handle_cli(_service, argv=None):
     
     install = subparsers.add_parser("install",
                                     help="Install the {} service".format(_service.name))
+    install.add_argument("--user", help="the user to run as", required=True)
     install.set_defaults(func=_service.install)
     
     remove = subparsers.add_parser("remove",
@@ -63,6 +65,7 @@ def handle_cli(_service, argv=None):
     
     start = subparsers.add_parser("start",
                                     help="Start the {} service".format(_service.name))
+    start.add_argument("--user", help="the user to run as", required=True)
     start.set_defaults(func=_service.start)
     
     stop = subparsers.add_parser("stop",
@@ -70,7 +73,7 @@ def handle_cli(_service, argv=None):
     stop.set_defaults(func=_service.stop)
     
     run = subparsers.add_parser("run",
-                                    help="Run {} in the foreground without installing as a service".format(_service.name))
+                                help="Run {} in the foreground without installing as a service".format(_service.name))
     run.set_defaults(func=_service.started)
 
     args = parser.parse_args(argv)
@@ -79,7 +82,7 @@ def handle_cli(_service, argv=None):
     if "func" not in kwargs:
         kwargs["func"] = _service.started 
     func = kwargs.pop("func")
-    
+
     if not func(**kwargs):
         sys.exit(1)
 
@@ -120,18 +123,23 @@ def service(func):
                                    'platform is unsupported.')
 
             # Make sure the path that PID files are stored in exists
-            pid_files_directory = os.path.join(os.path.expanduser('~'), '.pyservice_pids')
-            if not os.path.exists(pid_files_directory):
-                os.mkdir(pid_files_directory)
+            pid_files_directory = os.path.join("/var", "run")
+#            if not os.path.exists(pid_files_directory):
+#                os.mkdir(pid_files_directory)
 
             # Build up some paths
             self.pid_file = os.path.join(pid_files_directory, self.name + '.pid')
             self.control_script = '/etc/init.d/%s' % self.name
 
-        def started(self):
+        def started(self, user):
+            uid = pwd.getpwnam(user)
+            try:
+                os.setuid(uid.pw_uid)
+            except KeyError:
+                raise RuntimeError("* user {} does not seem to exist.".format(user))
             func(self)
 
-        def start(self):
+        def start(self, user):
             """Starts this service.
 
             Returns:
@@ -153,7 +161,7 @@ def service(func):
                 return False
 
             # Call event handler
-            self.started()
+            self.started(user)
             return result
 
         def stop(self):
@@ -162,7 +170,6 @@ def service(func):
             Returns:
                 True when stopping the service was a success and false when it failed.
             """
-
             # Make sure that the service is running
             if not self.is_running():
                 print('* Not running')
@@ -178,7 +185,7 @@ def service(func):
             # process, stopped() will be called when the python script exits
             return result
 
-        def install(self):
+        def install(self, user):
             """Installs this service.
 
             Returns:
@@ -192,7 +199,7 @@ def service(func):
 
             # Attempt to install the service
             print('* Installing %s' % self.name)
-            result = self._install()
+            result = self._install(user)
             if not result:
                 return False
 
@@ -256,10 +263,6 @@ def service(func):
                 print('* Unable to fork parent process (2): %s' % format(error))
                 return False
 
-            # Register cleanup function
-            atexit.register(self._clean)
-#            atexit.register(self.service.stopped)
-
             # Write the PID file
             pid = str(os.getpid())
             try:
@@ -267,8 +270,12 @@ def service(func):
                 file.write(str(pid) + '\n')
                 file.close()
             except Exception as error:
-                print('* Unable to write PID file to `%s`: %s' % self.pid_file, format(error))
+                print('* Unable to write PID file to `%s`: %s' %(self.pid_file, format(error)))
                 return False
+
+            # Register cleanup function
+            atexit.register(self._clean)
+#            atexit.register(self.service.stopped)
 
             # Redirect standard file descriptors to /dev/null
             sys.stdout.flush()
@@ -333,7 +340,7 @@ def service(func):
             print("* Unable to kill the process due to an unknown reason")
             return False
 
-        def _install(self):
+        def _install(self, user):
             """Installs the service so it can be started and stopped (if it's not installed yet).
 
             Returns:
@@ -354,7 +361,7 @@ def service(func):
 
                             case $1 in
                                 start)
-                                    $PYTHON_PATH $SERVICE_PATH start
+                                    $PYTHON_PATH $SERVICE_PATH start --user {0}
                                     ;;
 
                                 stop)
@@ -363,12 +370,12 @@ def service(func):
 
                                 restart)
                                     $PYTHON_PATH $SERVICE_PATH stop
-                                    $PYTHON_PATH $SERVICE_PATH start
+                                    $PYTHON_PATH $SERVICE_PATH start --user {0}
                                     ;;
 
                                 *)
                                     echo 'Unknown action, try; start/stop/restart\\n'
-                            esac""")
+                            esac""".format(user))
 
             # Determine the path of the current script and the path to the python interpreter
             service_path = os.path.join(os.getcwd(), sys.argv[0])
@@ -460,4 +467,5 @@ def service(func):
         
         def uninstalled(self):
             pass 
+
     return LinuxService()
