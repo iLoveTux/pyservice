@@ -33,17 +33,16 @@ privacy concerns.
 How does it work?
 -----------------
 
-Basically, you create an application class which inherits from
-`pyservice.PyService` and override the `started` and `stoped` methods.
-You can also optionally override the `installed` and `uninstalled` methods
-in order to perform and reverse any preparations which may need to be done
-when your service is installed or uninstalled.
+Basically, you create define a function and wrap it in the service
+decorator provided by this library. Then, safely wrapped in a
+'if __name__ == "__main__":' block, you call "handle_cli()" and pass
+in your callable. That's it.
 
 If you care about the details:
 
 On Linux a script is placed in `/etc/init.d/$name` where $name is the
 name of your service when it is installed. When it is being started a
-pidfile is created in `~/.pyservice_pids` and when it is stopped the
+pidfile is created in `/var/run/$name` and when it is stopped the
 pidfile is removed.
 
 On Windows, it is installed as a normal windows service and can be controlled
@@ -67,6 +66,24 @@ our sys v init script into a systemd unit.
 Show me the code!
 -----------------
 
+Here is a simple example which will write the current time to a file
+every minute:
+
+.. code:: python
+
+    from pyservice import service, handle_cli
+    import time
+    
+    @service
+    def time_writer(self):
+        while not self.stop_requested:
+            with open("/tmp/times.txt", "w") as fp:
+                fp.write(time.ctime(time.time) + "\n")
+            time.sleep(60)
+    
+    if __name__ == "__main__":
+        handle_cli(time_writer)
+
 Here is a simple example of an echo server created using twisted and turned
 into a service:
 
@@ -75,14 +92,13 @@ into a service:
     from pyservice import service, handle_cli
     import tornado.ioloop
     import tornado.web
-    import sys
 
     class TestHandler(tornado.web.RequestHandler):
         def get(self):
             self.write('Hello world!')
 
     @service
-    def main(self):
+    def tornado_server(self):
         application = tornado.web.Application([
             (r'/', TestHandler)
         ])
@@ -91,5 +107,12 @@ into a service:
         tornado.ioloop.IOLoop.instance().start()
 
     if __name__ == '__main__':
-        handle_cli(main)
+        handle_cli(tornado_server)
+
+Contributing
+------------
+
+You can do all of the usual github things like submitting issues and
+pull requests. For code submissions, please try to adhere to PEP 8 and
+please try to include unit tests for your enhancements and bug fixes.
 
