@@ -43,7 +43,7 @@ def handle_cli(_service, argv=None):
     will be taken.
 
     If none of the command line parameters above is specified, it will default
-    to `--run` which will run the program without being installed as a service.
+    to `run` which will run the program without being installed as a service.
     """
     argv = sys.argv[1:] if argv is None else argv
     
@@ -51,53 +51,37 @@ def handle_cli(_service, argv=None):
         description="Service control script for {}.".format(_service.name),
         epilog="Only one option is allowed at any time" 
     )
+    subparsers = parser.add_subparsers()
     
-    parser.add_argument(
-        "--install",
-        action="store_true",
-        help="Install {} as a service".format(_service.name))
-    parser.add_argument(
-        "--remove", 
-        action="store_true",
-        help="uninstall {} as a service".format(_service.name))
-    parser.add_argument(
-        "--start", 
-        action="store_true",
-        help="start {} service, if installed".format(_service.name))
-    parser.add_argument(
-        "--stop", 
-        action="store_true",
-        help="stop {} service, if installed and running".format(_service.name))
-    parser.add_argument(
-        "--run",
-        action="store_true",
-        help="run {} service without installing it first".format(_service.name)
-    )
+    install = subparsers.add_parser("install",
+                                    help="Install the {} service".format(_service.name))
+    install.set_defaults(func=_service.install)
+    
+    remove = subparsers.add_parser("remove",
+                                    help="Uninstall the {} service".format(_service.name))
+    remove.set_defaults(func=_service.uninstall)
+    
+    start = subparsers.add_parser("start",
+                                    help="Start the {} service".format(_service.name))
+    start.set_defaults(func=_service.start)
+    
+    stop = subparsers.add_parser("stop",
+                                    help="Stop the {} service".format(_service.name))
+    stop.set_defaults(func=_service.stop)
+    
+    run = subparsers.add_parser("run",
+                                    help="Run {} in the foreground without installing as a service".format(_service.name))
+    run.set_defaults(func=_service.started)
 
     args = parser.parse_args(argv)
-    
-    if len(filter(lambda x: x, vars(args).values())) > 1:
-        # More than one option specified
-        raise RuntimeError("Only one option can be specified at a time.")
-    
-    if not any(vars(args).values()):
-        # Nothing was provided, run without installing
-        args.run = True
-    
-    def run_or_exit_with_1(func):
-        if not func():
-            sys.exit(1)
+    kwargs = vars(args)
 
-    if args.run:
-        run_or_exit_with_1(_service.started)
-    elif args.install:
-        run_or_exit_with_1(_service.install)
-    elif args.remove:
-        run_or_exit_with_1(_service.uninstall)
-    elif args.start:
-        run_or_exit_with_1(_service.start)
-    elif args.stop:
-        run_or_exit_with_1(_service.stop)
+    if "func" not in kwargs:
+        kwargs["func"] = _service.started 
+    func = kwargs.pop("func")
+    
+    if not func(**kwargs):
+        sys.exit(1)
 
 
 # , service, name, description, auto_start
@@ -370,16 +354,16 @@ def service(func):
 
                             case $1 in
                                 start)
-                                    $PYTHON_PATH $SERVICE_PATH --start
+                                    $PYTHON_PATH $SERVICE_PATH start
                                     ;;
 
                                 stop)
-                                    $PYTHON_PATH $SERVICE_PATH --stop
+                                    $PYTHON_PATH $SERVICE_PATH stop
                                     ;;
 
                                 restart)
-                                    $PYTHON_PATH $SERVICE_PATH --stop
-                                    $PYTHON_PATH $SERVICE_PATH --start
+                                    $PYTHON_PATH $SERVICE_PATH stop
+                                    $PYTHON_PATH $SERVICE_PATH start
                                     ;;
 
                                 *)
